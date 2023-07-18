@@ -1,17 +1,3 @@
-// if(navigator.geolocation) {
-
-//     function success(postion) {
-//         console.log(position)
-//     }
-
-
-//     navigator.geolocation.getCurrentPosition(success, function() {
-//         console.log('Error with geolocation')
-//     })
-// } else {
-//     console.log('Geolocation API is not supported')
-// }
-
 
 const apiKey = '767baab1ba615005b7b57e268ed513fe';
 
@@ -84,3 +70,113 @@ function setUVIndexColor(uvi) {
         return 'red';
     } else return 'purple';
 }
+
+function searchWeather(queryURL) {
+
+    // Create an AJAX call to retrieve weather data
+    $.ajax({
+        url: queryURL,
+        method: 'GET'
+    }).then(function (response) {
+
+        // Store current city in past cities
+        let city = response.name;
+        let id = response.id;
+        // Remove duplicate cities
+        if (pastCities[0]) {
+            pastCities = $.grep(pastCities, function (storedCity) {
+                return id !== storedCity.id;
+            })
+        }
+        pastCities.unshift({ city, id });
+        storeCities();
+        displayCities(pastCities);
+
+        cityEl.text(response.name);
+        let formattedDate = moment.unix(response.dt).format('L');
+        dateEL.text(formattedDate);
+        let weatherIcon = response.weather[0].icon;
+        weatherIconEl.attr('src', `http://openweathermap.org/img/wn/${weatherIcon}.png`).attr('alt', response.weather[0].description);
+        temperatureEl.html(((response.main.temp - 273.15) * 1.8 + 32).toFixed(1));
+        humidityEl.text(response.main.humidity);
+        windEl.text((response.wind.speed * 2.237).toFixed(1));
+
+        let lat = response.coord.lat;
+        let lon = response.coord.lon;
+        let queryURLAll = `https://api.openweathermap.org/data/2.5/onecall?lat=${lat}&lon=${lon}&appid=${apiKey}`;
+        $.ajax({
+            url: queryURLAll,
+            method: 'GET'
+        }).then(function (response) {
+            let uvIndex = response.current.uvi;
+            let uvColor = setUVIndexColor(uvIndex);
+            uvIndexEl.text(response.current.uvi);
+            uvIndexEl.attr('style', `background-color: ${uvColor}; color: ${uvColor === "yellow" ? "black" : "white"}`);
+            let fiveDay = response.daily;
+
+            // Display 5 day forecast in DOM elements
+            for (let i = 0; i <= 5; i++) {
+                let currDay = fiveDay[i];
+                $(`div.day-${i} .card-title`).text(moment.unix(currDay.dt).format('L'));
+                $(`div.day-${i} .fiveDay-img`).attr(
+                    'src',
+                    `http://openweathermap.org/img/wn/${currDay.weather[0].icon}.png`
+                ).attr('alt', currDay.weather[0].description);
+                $(`div.day-${i} .fiveDay-temp`).text(((currDay.temp.day - 273.15) * 1.8 + 32).toFixed(1));
+                $(`div.day-${i} .fiveDay-humid`).text(currDay.humidity);
+            }
+        });
+    });
+}
+
+ function displayLastSearchedCity() {
+    if (pastCities[0]) {
+        let queryURL = buildURLFromId(pastCities[0].id);
+        searchWeather(queryURL);
+    } else {
+        // if no past searched cities, load Detroit weather data
+        let queryURL = buildURLFromInputs("Detroit");
+        searchWeather(queryURL);
+    }
+}
+
+// Click handler for search button
+$('#search-btn').on('click', function (event) {
+    // Preventing the button from trying to submit the form
+    event.preventDefault();
+
+    // Retrieving and scrubbing the city from the inputs
+    let city = cityInput.val().trim();
+    city = city.replace(' ', '%20');
+
+    // Clear the input fields
+    cityInput.val('');
+
+    // Build the query url with the city and searchWeather
+    if (city) {
+        let queryURL = buildURLFromInputs(city);
+        searchWeather(queryURL);
+    }
+}); 
+
+// Click handler for city buttons to load that city's weather
+$(document).on("click", "button.city-btn", function (event) {
+    let clickedCity = $(this).text();
+    let foundCity = $.grep(pastCities, function (storedCity) {
+        return clickedCity === storedCity.city;
+    })
+    let queryURL = buildURLFromId(foundCity[0].id)
+    searchWeather(queryURL);
+});
+
+// Initialization - when page loads
+
+// load any cities in local storage into array
+loadCities();
+displayCities(pastCities);
+
+// Display weather for last searched city
+displayLastSearchedCity();
+
+;
+
